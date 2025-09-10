@@ -19,9 +19,9 @@ type RateLimitService struct {
 	privilegeKey      string
 
 	// 限流配置
-	globalInterval    time.Duration // 全局限流间隔 (5秒)
-	ipInterval        time.Duration // IP限流间隔 (10秒)
-	turnstileInterval time.Duration // Turnstile验证间隔 (1分钟)
+	globalInterval    time.Duration // 全局限流间隔
+	ipInterval        time.Duration // IP限流间隔
+	turnstileInterval time.Duration // Turnstile验证间隔
 }
 
 // NewRateLimitService 创建新的限流服务
@@ -31,7 +31,7 @@ func NewRateLimitService(privilegeKey string) *RateLimitService {
 		privilegeKey:      privilegeKey,
 		globalInterval:    10 * time.Second,
 		ipInterval:        30 * time.Second,
-		turnstileInterval: 1 * 60 * time.Second, // 1分钟
+		turnstileInterval: 2 * 60 * time.Second, // 2分钟
 	}
 }
 

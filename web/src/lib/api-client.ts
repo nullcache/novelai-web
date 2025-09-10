@@ -27,6 +27,11 @@ class ApiClient {
     this.turnstileToken = null;
   }
 
+  // 获取 Turnstile token
+  getTurnstileToken() {
+    return this.turnstileToken;
+  }
+
   // 构建请求头
   private buildHeaders(options?: ApiClientOptions): Record<string, string> {
     const headers: Record<string, string> = {

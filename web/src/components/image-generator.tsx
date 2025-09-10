@@ -613,7 +613,8 @@ export function ImageGenerator() {
         open={showTurnstileDialog}
         onOpenChange={(open) => {
           setShowTurnstileDialog(open);
-          if (!open && pendingGeneration) {
+          // 只有在取消验证时才重置状态，验证成功时不重置
+          if (!open && pendingGeneration && !apiClient.getTurnstileToken()) {
             setPendingGeneration(false);
             setIsGenerating(false);
           }
