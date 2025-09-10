@@ -7,6 +7,7 @@ import (
 	"novelai-backend/internal/config"
 	"novelai-backend/internal/database"
 	"novelai-backend/internal/handler"
+	"novelai-backend/internal/middleware"
 	"novelai-backend/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -31,6 +32,7 @@ func main() {
 	// 初始化服务
 	novelaiService := service.NewNovelAIService(cfg.NovelAIAPIKey)
 	imageService := service.NewImageService(db, cfg.ImagesDir)
+	rateLimitService := service.NewRateLimitService(cfg.PrivilegeKey)
 
 	// 初始化处理器
 	imageHandler := handler.NewImageHandler(novelaiService, imageService)
@@ -60,9 +62,15 @@ func main() {
 	// API 路由
 	api := r.Group("/api")
 	{
-		api.POST("/generate", imageHandler.GenerateImage)
+		// 应用限流中间件到生成图像接口
+		api.POST("/generate",
+			middleware.RateLimitMiddleware(rateLimitService, cfg.TurnstileSecret),
+			imageHandler.GenerateImage)
+
+		// 其他接口不需要严格限流
 		api.GET("/images/:id", imageHandler.GetImage)
 		api.POST("/images/batch", imageHandler.GetImagesByIDs)
+
 	}
 
 	// 静态文件服务

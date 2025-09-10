@@ -6,18 +6,22 @@ import (
 )
 
 type Config struct {
-	NovelAIAPIKey string
-	DatabasePath  string
-	ImagesDir     string
-	Environment   string
+	NovelAIAPIKey   string
+	DatabasePath    string
+	ImagesDir       string
+	Environment     string
+	PrivilegeKey    string
+	TurnstileSecret string
 }
 
 func New() *Config {
 	cfg := &Config{
-		NovelAIAPIKey: getEnv("NOVELAI_API_KEY", ""),
-		DatabasePath:  getEnv("DATABASE_PATH", "./data/novelai.db"),
-		ImagesDir:     getEnv("IMAGES_DIR", "./data/images"),
-		Environment:   getEnv("ENVIRONMENT", "development"),
+		NovelAIAPIKey:   getEnv("NOVELAI_API_KEY", ""),
+		DatabasePath:    getEnv("DATABASE_PATH", "./data/novelai.db"),
+		ImagesDir:       getEnv("IMAGES_DIR", "./data/images"),
+		Environment:     getEnv("ENVIRONMENT", "development"),
+		PrivilegeKey:    getEnv("PRIVILEGE_KEY", ""),
+		TurnstileSecret: getEnv("TURNSTILE_SECRET", ""),
 	}
 
 	// 确保目录存在

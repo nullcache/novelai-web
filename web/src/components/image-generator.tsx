@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 "use client";
 
 import { useState, useEffect } from "react";
@@ -20,6 +21,20 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { ImageHistory } from "./image-history";
+import { TurnstileDialog } from "./turnstile-dialog";
+import {
+  apiClient,
+  RateLimitError,
+  TurnstileRequiredError,
+  InvalidTurnstileError,
+} from "@/lib/api-client";
+
+// API 响应类型
+interface GenerateImageResponse {
+  id: number;
+  seed: number;
+  image_url: string;
+}
 
 interface GenerationParams {
   prompt: string;
@@ -69,6 +84,11 @@ export function ImageGenerator() {
   const [enlargedImage, setEnlargedImage] = useState<GeneratedImage | null>(
     null
   );
+  const [showTurnstileDialog, setShowTurnstileDialog] = useState(false);
+  const [pendingGeneration, setPendingGeneration] = useState(false);
+
+  // Turnstile 配置 - 在实际使用时需要替换为真实的 site key
+  const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
 
   // Save blur setting to localStorage
   useEffect(() => {
@@ -119,30 +139,18 @@ export function ImageGenerator() {
     setIsGenerating(true);
 
     try {
-      // 调用 Next.js API（中转到 Go 后端）
-      const response = await fetch("/api/generate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+      // 使用 API 客户端发送请求
+      const result = await apiClient.post<GenerateImageResponse>(
+        "/api/generate",
+        {
           prompt: params.prompt,
           negative_prompt: params.negative_prompt,
           seed: params.seed,
           steps: params.steps,
           width: params.width,
           height: params.height,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(
-          errorData.error || `HTTP error! status: ${response.status}`
-        );
-      }
-
-      const result = await response.json();
+        }
+      );
 
       // 构建图像对象
       const newImage: GeneratedImage = {
@@ -177,11 +185,100 @@ export function ImageGenerator() {
       toast.success(`图像生成成功！`);
     } catch (error) {
       console.error("Generation error:", error);
-      const errorMessage =
-        error instanceof Error ? error.message : "发生未知错误";
-      toast.error(`生成图像失败: ${errorMessage}`);
+
+      if (error instanceof TurnstileRequiredError) {
+        // 需要 Turnstile 验证 - 保持生成状态，弹出验证框
+        setPendingGeneration(true);
+        setShowTurnstileDialog(true);
+        toast.error("需要完成安全验证");
+        return; // 不要在 finally 中重置状态
+      } else if (error instanceof InvalidTurnstileError) {
+        // Turnstile token 无效 - 清除旧token，保持生成状态，弹出验证框
+        apiClient.clearTurnstileToken();
+        setPendingGeneration(true);
+        setShowTurnstileDialog(true);
+        toast.error("验证已过期，请重新验证");
+        return; // 不要在 finally 中重置状态
+      } else if (error instanceof RateLimitError) {
+        // 限流错误
+        if (error.type === "global") {
+          toast.error("网站当前请求人数过多，请稍后");
+        } else if (error.type === "ip") {
+          toast.error("30s内只能生成一张图片");
+        }
+      } else {
+        // 其他错误
+        const errorMessage =
+          error instanceof Error ? error.message : "发生未知错误";
+        toast.error(`生成图像失败: ${errorMessage}`);
+      }
     } finally {
-      setIsGenerating(false);
+      // 只有在不需要验证的情况下才重置生成状态
+      // 如果需要验证，状态会在验证完成后重置
+      if (!pendingGeneration) {
+        setIsGenerating(false);
+      }
+    }
+  };
+
+  // 处理 Turnstile 验证完成
+  const handleTurnstileVerified = async () => {
+    if (pendingGeneration) {
+      setPendingGeneration(false);
+      setIsGenerating(true); // 确保生成状态为 true
+
+      // 验证完成后，重新尝试生成
+      try {
+        const result = await apiClient.post<GenerateImageResponse>(
+          "/api/generate",
+          {
+            prompt: params.prompt,
+            negative_prompt: params.negative_prompt,
+            seed: params.seed,
+            steps: params.steps,
+            width: params.width,
+            height: params.height,
+          }
+        );
+
+        // 构建图像对象
+        const newImage: GeneratedImage = {
+          id: result.id,
+          prompt: params.prompt,
+          negative_prompt: params.negative_prompt,
+          seed: result.seed,
+          steps: params.steps,
+          width: params.width,
+          height: params.height,
+          image_url: `/api/files${result.image_url.replace("/files", "")}`,
+          status: "success",
+          created_at: new Date().toISOString(),
+        };
+
+        // 保存 ID 到 localStorage
+        const storedIds = localStorage.getItem("novelai-image-ids");
+        const ids = storedIds ? (JSON.parse(storedIds) as number[]) : [];
+        ids.unshift(result.id);
+
+        if (ids.length > 100) {
+          ids.splice(100);
+        }
+
+        localStorage.setItem("novelai-image-ids", JSON.stringify(ids));
+
+        // 更新显示的图像列表
+        setGeneratedImages((prev) => [newImage, ...prev]);
+        setCurrentImageIndex(0);
+
+        toast.success(`图像生成成功！`);
+      } catch (error) {
+        console.error("Generation error after verification:", error);
+        const errorMessage =
+          error instanceof Error ? error.message : "发生未知错误";
+        toast.error(`生成图像失败: ${errorMessage}`);
+      } finally {
+        setIsGenerating(false);
+      }
     }
   };
 
@@ -221,22 +318,25 @@ export function ImageGenerator() {
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
       {/* Generation Panel */}
       <div className="space-y-6">
-        {/* 高斯模糊开关 */}
+        {/* 顶部控制栏 */}
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">图像生成参数</h1>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setBlurEnabled(!blurEnabled)}
-            className="flex items-center gap-2"
-          >
-            {blurEnabled ? (
-              <EyeOff className="w-4 h-4" />
-            ) : (
-              <Eye className="w-4 h-4" />
-            )}
-            {blurEnabled ? "关闭模糊" : "开启模糊"}
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* 高斯模糊开关 */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setBlurEnabled(!blurEnabled)}
+              className="flex items-center gap-2"
+            >
+              {blurEnabled ? (
+                <EyeOff className="w-4 h-4" />
+              ) : (
+                <Eye className="w-4 h-4" />
+              )}
+              {blurEnabled ? "关闭模糊" : "开启模糊"}
+            </Button>
+          </div>
         </div>
 
         <Card>
@@ -404,7 +504,7 @@ export function ImageGenerator() {
               <div className="text-center py-12 text-muted-foreground">
                 <p>还没有生成图像。</p>
                 <p className="text-sm mt-2">
-                  输入提示词并点击"生成图像"开始使用。
+                  输入提示词并点击&quot;生成图像&quot;开始使用。
                 </p>
               </div>
             ) : (
@@ -507,6 +607,20 @@ export function ImageGenerator() {
 
       {/* History Modal */}
       {showHistory && <ImageHistory onClose={() => setShowHistory(false)} />}
+
+      {/* Turnstile Dialog */}
+      <TurnstileDialog
+        open={showTurnstileDialog}
+        onOpenChange={(open) => {
+          setShowTurnstileDialog(open);
+          if (!open && pendingGeneration) {
+            setPendingGeneration(false);
+            setIsGenerating(false);
+          }
+        }}
+        onVerified={handleTurnstileVerified}
+        siteKey={TURNSTILE_SITE_KEY}
+      />
 
       {/* Enlarged Image Modal */}
       {enlargedImage && (

@@ -6,12 +6,36 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
+    // 构建转发的 headers
+    const forwardHeaders: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+
+    // 转发特权密钥
+    const privilegeKey = request.headers.get("X-Privilege-Key");
+    if (privilegeKey) {
+      forwardHeaders["X-Privilege-Key"] = privilegeKey;
+    }
+
+    // 转发 Turnstile token
+    const turnstileToken = request.headers.get("X-Turnstile-Token");
+    if (turnstileToken) {
+      forwardHeaders["X-Turnstile-Token"] = turnstileToken;
+    }
+
+    // 转发客户端 IP
+    const clientIP =
+      request.headers.get("X-Forwarded-For") ||
+      request.headers.get("X-Real-IP") ||
+      request.ip;
+    if (clientIP) {
+      forwardHeaders["X-Forwarded-For"] = clientIP;
+    }
+
     // 转发请求到 Go 后端
     const response = await fetch(`${BACKEND_URL}/api/generate`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: forwardHeaders,
       body: JSON.stringify(body),
     });
 
