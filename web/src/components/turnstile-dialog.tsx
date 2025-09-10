@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -22,27 +22,39 @@ interface TurnstileDialogProps {
   siteKey: string;
 }
 
-export function TurnstileDialog({ 
-  open, 
-  onOpenChange, 
+export function TurnstileDialog({
+  open,
+  onOpenChange,
   onVerified,
-  siteKey 
+  siteKey,
 }: TurnstileDialogProps) {
   const [isVerified, setIsVerified] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [turnstileKey, setTurnstileKey] = useState(0);
+
+  // 当对话框打开时重置所有状态
+  useEffect(() => {
+    if (open) {
+      setIsVerified(false);
+      setIsVerifying(false);
+      setError(null);
+      // 强制重新渲染 Turnstile 组件
+      setTurnstileKey((prev) => prev + 1);
+    }
+  }, [open]);
 
   const handleVerify = (token: string) => {
     setIsVerifying(true);
     setError(null);
-    
+
     // 保存 Turnstile token
     apiClient.setTurnstileToken(token);
     setIsVerified(true);
     setIsVerifying(false);
-    
+
     toast.success("验证成功！");
-    
+
     // 延迟关闭对话框并调用回调
     setTimeout(() => {
       onVerified();
@@ -81,7 +93,7 @@ export function TurnstileDialog({
             为了防止滥用，请完成以下安全验证。
           </DialogDescription>
         </DialogHeader>
-        
+
         <div className="grid gap-4 py-4">
           {error && (
             <div className="flex items-center gap-2 p-3 bg-destructive/10 text-destructive rounded-md">
@@ -89,7 +101,7 @@ export function TurnstileDialog({
               <span className="text-sm">{error}</span>
             </div>
           )}
-          
+
           {isVerified ? (
             <div className="flex items-center gap-2 p-3 bg-green-100 text-green-800 rounded-md">
               <CheckCircle className="w-4 h-4" />
@@ -100,9 +112,10 @@ export function TurnstileDialog({
               <div className="text-sm text-muted-foreground text-center">
                 请完成下方的验证以继续使用服务
               </div>
-              
+
               {siteKey ? (
                 <Turnstile
+                  key={turnstileKey}
                   siteKey={siteKey}
                   onVerify={handleVerify}
                   onError={handleError}
@@ -119,7 +132,7 @@ export function TurnstileDialog({
             </div>
           )}
         </div>
-        
+
         <DialogFooter>
           <Button variant="outline" onClick={handleClose}>
             {isVerified ? "完成" : "取消"}
