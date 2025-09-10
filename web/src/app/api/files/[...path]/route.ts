@@ -4,10 +4,10 @@ const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8080";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
   try {
-    const { path } = params;
+    const { path } = await params;
     const filePath = path.join("/");
 
     // 转发请求到 Go 后端的文件服务
@@ -24,7 +24,8 @@ export async function GET(
 
     // 获取文件内容和类型
     const fileBuffer = await response.arrayBuffer();
-    const contentType = response.headers.get("content-type") || "application/octet-stream";
+    const contentType =
+      response.headers.get("content-type") || "application/octet-stream";
 
     // 返回文件内容
     return new NextResponse(fileBuffer, {

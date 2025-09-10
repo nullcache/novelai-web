@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     const clientIP =
       request.headers.get("X-Forwarded-For") ||
       request.headers.get("X-Real-IP") ||
-      request.ip;
+      "127.0.0.1"; // NextRequest 没有 ip 属性，使用默认值
     if (clientIP) {
       forwardHeaders["X-Forwarded-For"] = clientIP;
     }
