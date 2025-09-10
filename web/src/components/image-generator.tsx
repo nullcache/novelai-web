@@ -9,6 +9,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Loader2,
   Download,
   History,
@@ -36,6 +43,17 @@ interface GenerateImageResponse {
   image_url: string;
 }
 
+interface StylePreset {
+  id: number;
+  name: string;
+  description: string;
+  prefix_prompt: string;
+  suffix_prompt: string;
+  prefix_negative_prompt: string;
+  suffix_negative_prompt: string;
+  enabled: boolean;
+}
+
 interface GenerationParams {
   prompt: string;
   negative_prompt: string;
@@ -43,6 +61,7 @@ interface GenerationParams {
   steps: number;
   width: number;
   height: number;
+  style_preset_id?: number;
 }
 
 interface GeneratedImage {
@@ -87,6 +106,16 @@ export function ImageGenerator() {
   const [showTurnstileDialog, setShowTurnstileDialog] = useState(false);
   const [pendingGeneration, setPendingGeneration] = useState(false);
 
+  // 画风预设相关状态
+  const [stylePresets, setStylePresets] = useState<StylePreset[]>([]);
+  const [selectedPresetId, setSelectedPresetId] = useState<number | null>(null);
+  const [presetPromptParts, setPresetPromptParts] = useState({
+    prefixPrompt: "",
+    suffixPrompt: "",
+    prefixNegativePrompt: "",
+    suffixNegativePrompt: "",
+  });
+
   // Turnstile 配置 - 在实际使用时需要替换为真实的 site key
   const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
 
@@ -130,6 +159,86 @@ export function ImageGenerator() {
     loadRecentImages();
   }, []);
 
+  // Load style presets on component mount
+  useEffect(() => {
+    const loadStylePresets = async () => {
+      try {
+        const response = await fetch("/api/style-presets");
+        if (response.ok) {
+          const data = await response.json();
+          setStylePresets(data.presets || []);
+        }
+      } catch (error) {
+        console.error("Failed to load style presets:", error);
+      }
+    };
+
+    loadStylePresets();
+  }, []);
+
+  // Handle style preset selection
+  const handleStylePresetChange = (presetId: string) => {
+    if (presetId === "none") {
+      setSelectedPresetId(null);
+      setPresetPromptParts({
+        prefixPrompt: "",
+        suffixPrompt: "",
+        prefixNegativePrompt: "",
+        suffixNegativePrompt: "",
+      });
+      setParams((prev) => ({ ...prev, style_preset_id: undefined }));
+    } else {
+      const preset = stylePresets.find((p) => p.id === parseInt(presetId));
+      if (preset) {
+        setSelectedPresetId(preset.id);
+        setPresetPromptParts({
+          prefixPrompt: preset.prefix_prompt,
+          suffixPrompt: preset.suffix_prompt,
+          prefixNegativePrompt: preset.prefix_negative_prompt,
+          suffixNegativePrompt: preset.suffix_negative_prompt,
+        });
+        setParams((prev) => ({ ...prev, style_preset_id: preset.id }));
+      }
+    }
+  };
+
+  // Handle double click to make preset text editable
+  const handlePresetTextDoubleClick = (
+    type: keyof typeof presetPromptParts
+  ) => {
+    const presetText = presetPromptParts[type];
+    if (presetText) {
+      // 将预设文本添加到对应的输入框中
+      if (type === "prefixPrompt" || type === "suffixPrompt") {
+        setParams((prev) => ({
+          ...prev,
+          prompt:
+            type === "prefixPrompt"
+              ? presetText + prev.prompt
+              : prev.prompt + presetText,
+        }));
+      } else {
+        setParams((prev) => ({
+          ...prev,
+          negative_prompt:
+            type === "prefixNegativePrompt"
+              ? presetText + prev.negative_prompt
+              : prev.negative_prompt + presetText,
+        }));
+      }
+    }
+
+    // 重置预设选择
+    setSelectedPresetId(null);
+    setPresetPromptParts({
+      prefixPrompt: "",
+      suffixPrompt: "",
+      prefixNegativePrompt: "",
+      suffixNegativePrompt: "",
+    });
+    setParams((prev) => ({ ...prev, style_preset_id: undefined }));
+  };
+
   const handleGenerate = async () => {
     if (!params.prompt.trim()) {
       toast.error("Please enter a prompt");
@@ -139,7 +248,7 @@ export function ImageGenerator() {
     setIsGenerating(true);
 
     try {
-      // 使用 API 客户端发送请求
+      // 使用 API 客户端发送请求，后端会根据 style_preset_id 组合文本
       const result = await apiClient.post<GenerateImageResponse>(
         "/api/generate",
         {
@@ -149,6 +258,7 @@ export function ImageGenerator() {
           steps: params.steps,
           width: params.width,
           height: params.height,
+          style_preset_id: params.style_preset_id,
         }
       );
 
@@ -238,6 +348,7 @@ export function ImageGenerator() {
             steps: params.steps,
             width: params.width,
             height: params.height,
+            style_preset_id: params.style_preset_id,
           }
         );
 
@@ -344,37 +455,116 @@ export function ImageGenerator() {
             <CardTitle>生成图像</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* 画风预设选择器 */}
+            <div>
+              <Label htmlFor="style-preset" className="block mb-2">
+                画风预设（推荐选古风）
+              </Label>
+              <Select
+                value={selectedPresetId ? selectedPresetId.toString() : "none"}
+                onValueChange={handleStylePresetChange}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="选择画风预设" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">无</SelectItem>
+                  {stylePresets.map((preset) => (
+                    <SelectItem key={preset.id} value={preset.id.toString()}>
+                      {preset.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div>
               <Label htmlFor="prompt" className="block mb-2">
                 正向提示词
               </Label>
-              <Textarea
-                id="prompt"
-                placeholder="描述你想要生成的图像..."
-                value={params.prompt}
-                onChange={(e) =>
-                  setParams((prev) => ({ ...prev, prompt: e.target.value }))
-                }
-                className="min-h-[100px]"
-              />
+              <div className="space-y-1">
+                {/* 预设前缀文本 */}
+                {presetPromptParts.prefixPrompt && (
+                  <div
+                    className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-500 text-sm cursor-pointer hover:bg-gray-100 transition-colors"
+                    onDoubleClick={() =>
+                      handlePresetTextDoubleClick("prefixPrompt")
+                    }
+                    title="双击转为可编辑文本"
+                  >
+                    {presetPromptParts.prefixPrompt}
+                  </div>
+                )}
+
+                <Textarea
+                  id="prompt"
+                  placeholder="描述你想要生成的图像..."
+                  value={params.prompt}
+                  onChange={(e) =>
+                    setParams((prev) => ({ ...prev, prompt: e.target.value }))
+                  }
+                  className="min-h-[100px]"
+                />
+
+                {/* 预设后缀文本 */}
+                {presetPromptParts.suffixPrompt && (
+                  <div
+                    className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-500 text-sm cursor-pointer hover:bg-gray-100 transition-colors"
+                    onDoubleClick={() =>
+                      handlePresetTextDoubleClick("suffixPrompt")
+                    }
+                    title="双击转为可编辑文本"
+                  >
+                    {presetPromptParts.suffixPrompt}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div>
               <Label htmlFor="negative_prompt" className="block mb-2">
                 负向提示词
               </Label>
-              <Textarea
-                id="negative_prompt"
-                placeholder="描述你不想要在图像中出现的内容..."
-                value={params.negative_prompt}
-                onChange={(e) =>
-                  setParams((prev) => ({
-                    ...prev,
-                    negative_prompt: e.target.value,
-                  }))
-                }
-                className="min-h-[80px]"
-              />
+              <div className="space-y-1">
+                {/* 预设前缀文本 */}
+                {presetPromptParts.prefixNegativePrompt && (
+                  <div
+                    className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-500 text-sm cursor-pointer hover:bg-gray-100 transition-colors"
+                    onDoubleClick={() =>
+                      handlePresetTextDoubleClick("prefixNegativePrompt")
+                    }
+                    title="双击转为可编辑文本"
+                  >
+                    {presetPromptParts.prefixNegativePrompt}
+                  </div>
+                )}
+
+                <Textarea
+                  id="negative_prompt"
+                  placeholder="描述你不想要在图像中出现的内容..."
+                  value={params.negative_prompt}
+                  onChange={(e) =>
+                    setParams((prev) => ({
+                      ...prev,
+                      negative_prompt: e.target.value,
+                    }))
+                  }
+                  className="min-h-[80px]"
+                />
+
+                {/* 预设后缀文本 */}
+                {presetPromptParts.suffixNegativePrompt && (
+                  <div
+                    className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-gray-500 text-sm cursor-pointer hover:bg-gray-100 transition-colors"
+                    onDoubleClick={() =>
+                      handlePresetTextDoubleClick("suffixNegativePrompt")
+                    }
+                    title="双击转为可编辑文本"
+                  >
+                    {presetPromptParts.suffixNegativePrompt}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

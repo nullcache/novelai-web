@@ -12,15 +12,17 @@ import (
 
 // ImageHandler 图像处理器
 type ImageHandler struct {
-	novelaiService *service.NovelAIService
-	imageService   *service.ImageService
+	novelaiService     *service.NovelAIService
+	imageService       *service.ImageService
+	stylePresetService *service.StylePresetService
 }
 
 // NewImageHandler 创建图像处理器实例
-func NewImageHandler(novelaiService *service.NovelAIService, imageService *service.ImageService) *ImageHandler {
+func NewImageHandler(novelaiService *service.NovelAIService, imageService *service.ImageService, stylePresetService *service.StylePresetService) *ImageHandler {
 	return &ImageHandler{
-		novelaiService: novelaiService,
-		imageService:   imageService,
+		novelaiService:     novelaiService,
+		imageService:       imageService,
+		stylePresetService: stylePresetService,
 	}
 }
 
@@ -65,13 +67,36 @@ func (h *ImageHandler) GenerateImage(c *gin.Context) {
 		req.NegativePrompt = "bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry"
 	}
 
+	// 应用画风预设
+	finalPrompt := req.Prompt
+	finalNegativePrompt := req.NegativePrompt
+
+	if req.StylePresetID != nil && *req.StylePresetID > 0 {
+		preset, err := h.stylePresetService.GetStylePresetByID(*req.StylePresetID)
+		if err == nil {
+			// 应用前缀和后缀
+			if preset.PrefixPrompt != "" {
+				finalPrompt = preset.PrefixPrompt + finalPrompt
+			}
+			if preset.SuffixPrompt != "" {
+				finalPrompt = finalPrompt + preset.SuffixPrompt
+			}
+			if preset.PrefixNegativePrompt != "" {
+				finalNegativePrompt = preset.PrefixNegativePrompt + finalNegativePrompt
+			}
+			if preset.SuffixNegativePrompt != "" {
+				finalNegativePrompt = finalNegativePrompt + preset.SuffixNegativePrompt
+			}
+		}
+	}
+
 	// 记录开始时间
 	startTime := time.Now()
 
 	// 调用 NovelAI API
 	novelaiReq := &service.GenerationRequest{
-		Prompt:         req.Prompt,
-		NegativePrompt: req.NegativePrompt,
+		Prompt:         finalPrompt,
+		NegativePrompt: finalNegativePrompt,
 		Seed:           req.Seed,
 		Steps:          req.Steps,
 		Width:          req.Width,
@@ -80,7 +105,7 @@ func (h *ImageHandler) GenerateImage(c *gin.Context) {
 
 	imageData, originalPayload, err := h.novelaiService.GenerateImage(novelaiReq)
 	if err != nil {
-		// 保存失败记录
+		// 保存失败记录 - 使用用户原始输入，不包含预设文本
 		generation, _ := h.imageService.SaveFailedGeneration(
 			req.Prompt,
 			req.NegativePrompt,

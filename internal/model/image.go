@@ -2,16 +2,13 @@ package model
 
 import (
 	"time"
-
-	"gorm.io/gorm"
 )
 
 // ImageGeneration 图像生成记录
 type ImageGeneration struct {
-	ID        uint           `json:"id" gorm:"primaryKey"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
-	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
+	ID        uint      `json:"id" gorm:"primaryKey"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 
 	// 用户输入参数
 	Prompt         string `json:"prompt" gorm:"type:text;not null"`
@@ -43,26 +40,4 @@ type ImageGeneration struct {
 // TableName 指定表名
 func (ImageGeneration) TableName() string {
 	return "image_generations"
-}
-
-// StylePreset 画风预设（预留）
-type StylePreset struct {
-	ID        uint           `json:"id" gorm:"primaryKey"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
-	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
-
-	Name        string `json:"name" gorm:"not null;uniqueIndex"`
-	Description string `json:"description" gorm:"type:text"`
-
-	// 预设参数（JSON 格式存储）
-	Parameters string `json:"parameters" gorm:"type:text"`
-
-	// 是否启用
-	Enabled bool `json:"enabled" gorm:"default:true"`
-}
-
-// TableName 指定表名
-func (StylePreset) TableName() string {
-	return "style_presets"
 }

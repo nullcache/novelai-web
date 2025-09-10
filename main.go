@@ -33,9 +33,11 @@ func main() {
 	novelaiService := service.NewNovelAIService(cfg.NovelAIAPIKey)
 	imageService := service.NewImageService(db, cfg.ImagesDir)
 	rateLimitService := service.NewRateLimitService(cfg.PrivilegeKey)
+	stylePresetService := service.NewStylePresetService(db)
 
 	// 初始化处理器
-	imageHandler := handler.NewImageHandler(novelaiService, imageService)
+	imageHandler := handler.NewImageHandler(novelaiService, imageService, stylePresetService)
+	stylePresetHandler := handler.NewStylePresetHandler(stylePresetService)
 
 	// 设置 Gin 模式
 	if cfg.Environment == "production" {
@@ -71,6 +73,8 @@ func main() {
 		api.GET("/images/:id", imageHandler.GetImage)
 		api.POST("/images/batch", imageHandler.GetImagesByIDs)
 
+		// 画风预设接口
+		api.GET("/style-presets", stylePresetHandler.GetStylePresets)
 	}
 
 	// 静态文件服务
