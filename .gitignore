@@ -1,6 +1,7 @@
 # Backend specific
 data/
-.env
+.env*
+!.env.example
 .DS_Store
 
 # Frontend (web/) specific
