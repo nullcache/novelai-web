@@ -281,11 +281,6 @@ export function ImageGenerator() {
       const ids = storedIds ? (JSON.parse(storedIds) as number[]) : [];
       ids.unshift(result.id); // 添加到开头
 
-      // 只保留最近的 100 个 ID
-      if (ids.length > 100) {
-        ids.splice(100);
-      }
-
       localStorage.setItem("novelai-image-ids", JSON.stringify(ids));
 
       // 更新显示的图像列表 - 新图片追加到前面，不限制数量
@@ -371,9 +366,6 @@ export function ImageGenerator() {
         const ids = storedIds ? (JSON.parse(storedIds) as number[]) : [];
         ids.unshift(result.id);
 
-        if (ids.length > 100) {
-          ids.splice(100);
-        }
 
         localStorage.setItem("novelai-image-ids", JSON.stringify(ids));
 
