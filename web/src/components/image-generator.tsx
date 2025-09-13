@@ -309,7 +309,7 @@ export function ImageGenerator() {
         if (error.type === "global") {
           toast.error("网站当前请求人数过多，请稍后");
         } else if (error.type === "ip") {
-          toast.error("30s内只能生成一张图片");
+          toast.error("15s内只能生成一张图片");
         }
       } else {
         // 其他错误

@@ -29,8 +29,8 @@ func NewRateLimitService(privilegeKey string) *RateLimitService {
 	return &RateLimitService{
 		ipRecords:         make(map[string]*IPRecord),
 		privilegeKey:      privilegeKey,
-		globalInterval:    10 * time.Second,
-		ipInterval:        30 * time.Second,
+		globalInterval:    8 * time.Second,
+		ipInterval:        15 * time.Second,
 		turnstileInterval: 2 * 60 * time.Second, // 2分钟
 	}
 }
